@@ -1,0 +1,38 @@
+services:
+  emby-autoclean:
+    image: majosissi/emby-autoclean:latest
+    container_name: emby-autoclean
+    restart: unless-stopped
+    network_mode: host
+    # 限制容器输出日志的大小和数量, 建议启用
+    logging:
+      driver: "json-file"
+      options:
+        # 单个日志文件的最大大小  
+        max-size: "1m"
+        # 最多保留的日志文件数量
+        max-file: "3"
+    environment:
+      - TZ=Asia/Shanghai
+      # Emby服务器地址，如 http://localhost:8096
+      - EMBY_URL=http://localhost:8096
+      # Emby API密钥（二选一，与用户名密码认证）
+      - EMBY_API_KEY=
+      # Emby用户名（二选一，与API密钥认证）
+      - EMBY_USERNAME=
+      # Emby密码（与用户名配合使用）
+      - EMBY_PASSWORD=
+      # 定时任务cron表达式，默认每天凌晨2点执行
+      - CRON_SCHEDULE=0 2 * * *
+      # 保留已观看剧集的天数，超过此天数的已观看剧集将被删除
+      - DAYS_TO_KEEP=30
+      # 每部剧保留最近N集不删除
+      - KEEP_EPISODES=2
+      # 只清理特定媒体库，多个用逗号分隔，为空则清理所有TV库
+      - LIBRARY_FILTER=
+      # 只清理包含特定标签的文件，多个用逗号分隔，为空则不过滤
+      - TAG_FILTER=
+      # 白名单标签，包含这些标签的文件不会被删除，多个用逗号分隔
+      - WHITELIST_TAGS=
+      # 预览模式，设为true时只打印日志不实际删除
+      - DRY_RUN=true
