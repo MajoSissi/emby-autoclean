@@ -105,7 +105,8 @@ class EpisodeCleaner:
         library_filter: List[str] = None,
         tag_filter: List[str] = None,
         whitelist_tags: List[str] = None,
-        dry_run: bool = False
+        dry_run: bool = False,
+        delete_empty_series: bool = True
     ):
         self.client = client
         self.days_to_keep = days_to_keep
@@ -114,7 +115,8 @@ class EpisodeCleaner:
         self.tag_filter = tag_filter or []
         self.whitelist_tags = whitelist_tags or []
         self.dry_run = dry_run
-        self.stats = {'deleted': 0, 'skipped': 0, 'errors': 0}
+        self.delete_empty_series = delete_empty_series
+        self.stats = {'deleted': 0, 'skipped': 0, 'errors': 0, 'series_deleted': 0}
 
     def should_process_library(self, library_name: str) -> bool:
         return not self.library_filter or library_name in self.library_filter
@@ -163,47 +165,73 @@ class EpisodeCleaner:
 
     def clean_series(self, series: Dict):
         series_name = series.get('Name', 'Unknown')
-        keep_ids = self.get_series_to_keep(series['Id'])
         episodes = self.client.get_series_episodes(series['Id'])
-        
+
+        if not episodes:
+            if self.delete_empty_series:
+                if self.dry_run:
+                    logger.info(f"  ⚠ 将删除空剧集: {series_name} (无任何集数)")
+                    self.stats['series_deleted'] += 1
+                else:
+                    if self.client.delete_item(series['Id']):
+                        logger.info(f"  ⚠ 已删除空剧集: {series_name} (无任何集数)")
+                        self.stats['series_deleted'] += 1
+                    else:
+                        self.stats['errors'] += 1
+            return
+
         watched_count = sum(1 for ep in episodes if self.is_watched(ep))
         if watched_count == 0:
             return
-        
+
+        keep_ids = self.get_series_to_keep(series['Id'])
         logger.info(f"  📺 {series_name} (已观看: {watched_count}/{len(episodes)})")
 
+        deleted_count = 0
         for episode in episodes:
             if not self.is_watched(episode):
                 continue
-                
+
             ep_name = episode.get('Name', f"S{episode.get('ParentIndexNumber', 0):02d}E{episode.get('IndexNumber', 0):02d}")
-            
+
             if episode['Id'] in keep_ids:
                 self.stats['skipped'] += 1
                 logger.info(f"    ✓ 保留: {ep_name}")
                 continue
 
-            watched_date = self.get_watched_date(episode)
-            if watched_date:
-                days = (datetime.now(watched_date.tzinfo) - watched_date).days
-                logger.debug(f"    UserData: {user_data}")
-            
             if self.should_delete(episode):
                 if self.dry_run:
                     logger.info(f"    ✗ 将删除: {ep_name}")
                     self.stats['deleted'] += 1
+                    deleted_count += 1
                 else:
                     if self.client.delete_item(episode['Id']):
                         logger.info(f"    ✗ 已删除: {ep_name}")
                         self.stats['deleted'] += 1
+                        deleted_count += 1
                     else:
                         self.stats['errors'] += 1
             else:
                 self.stats['skipped'] += 1
+                watched_date = self.get_watched_date(episode)
                 if watched_date:
+                    days = (datetime.now(watched_date.tzinfo) - watched_date).days
                     logger.info(f"    - 跳过: {ep_name} (观看于 {days} 天前)")
                 else:
                     logger.info(f"    - 跳过: {ep_name} (无观看记录)")
+
+        if deleted_count > 0 and self.delete_empty_series:
+            remaining = self.client.get_series_episodes(series['Id'])
+            if not remaining:
+                if self.dry_run:
+                    logger.info(f"  ⚠ 将删除空剧集: {series_name} (所有集数已删除)")
+                    self.stats['series_deleted'] += 1
+                else:
+                    if self.client.delete_item(series['Id']):
+                        logger.info(f"  ⚠ 已删除空剧集: {series_name} (所有集数已删除)")
+                        self.stats['series_deleted'] += 1
+                    else:
+                        self.stats['errors'] += 1
 
     def clean_library(self, library: Dict):
         library_name = library.get('Name', 'Unknown')
@@ -230,7 +258,7 @@ class EpisodeCleaner:
                 self.clean_library(library)
 
         logger.info("=" * 40)
-        logger.info(f"清理完成: 删除 {self.stats['deleted']} | 跳过 {self.stats['skipped']} | 错误 {self.stats['errors']}")
+        logger.info(f"清理完成: 删除 {self.stats['deleted']} | 跳过 {self.stats['skipped']} | 错误 {self.stats['errors']} | 删除空剧集 {self.stats['series_deleted']}")
         logger.info("=" * 40)
 
 
@@ -263,6 +291,7 @@ def main():
     tag_filter = parse_list(os.getenv('TAG_FILTER', ''))
     whitelist_tags = parse_list(os.getenv('WHITELIST_TAGS', ''))
     dry_run = os.getenv('DRY_RUN', 'false').lower() == 'true'
+    delete_empty_series = os.getenv('DELETE_EMPTY_SERIES', 'true').lower() == 'true'
     cron_schedule = os.getenv('CRON_SCHEDULE', '0 2 * * *')
 
     try:
@@ -278,7 +307,8 @@ def main():
         library_filter=library_filter,
         tag_filter=tag_filter,
         whitelist_tags=whitelist_tags,
-        dry_run=dry_run
+        dry_run=dry_run,
+        delete_empty_series=delete_empty_series
     )
 
     def run_cleanup():

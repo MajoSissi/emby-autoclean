@@ -28,6 +28,8 @@ services:
       - DAYS_TO_KEEP=30
       # 每部剧保留最近N集不删除
       - KEEP_EPISODES=2
+      # 是否删除空的剧集文件夹
+      - DELETE_EMPTY_SERIES=true
       # 只清理特定媒体库，多个用逗号分隔，为空则清理所有TV库
       - LIBRARY_FILTER=
       # 只清理包含特定标签的文件，多个用逗号分隔，为空则不过滤

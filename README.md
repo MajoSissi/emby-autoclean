@@ -10,7 +10,7 @@
 - 支持只清理特定媒体库
 - 支持只清理特定标签的文件
 - 白名单保护（收藏和指定标签的文件不会被删除）
-- 自动清理空文件夹
+- 当剧集的所有集都被删除后，自动删除该剧集条目
 
 ## 快速开始
 
@@ -27,6 +27,7 @@
 | `TAG_FILTER` | 否 | - | 逗号分隔的标签，只清理包含这些标签的文件 |
 | `WHITELIST_TAGS` | 否 | - | 逗号分隔的白名单标签，包含这些标签的文件不会被删除 |
 | `DRY_RUN` | 否 | `false` | 设为 `true` 可预览删除操作而不实际删除 |
+| `DELETE_EMPTY_SERIES` | 否 | `true` | 设为 `true` 当剧集所有集被删除后自动删除该剧集条目 |
 
 ### Docker运行
 
@@ -52,6 +53,7 @@ EMBY_API_KEY=your-api-key
 CRON_SCHEDULE=0 2 * * *
 DAYS_TO_KEEP=30
 KEEP_EPISODES=2
+DELETE_EMPTY_SERIES=true
 DRY_RUN=false
 ```
 
@@ -116,6 +118,16 @@ docker run -d \
   -e EMBY_URL=http://emby:8096 \
   -e EMBY_API_KEY=xxx \
   -e DRY_RUN=true \
+  your-username/emby-autoclean
+```
+
+### 场景5：删除空剧集
+
+```bash
+docker run -d \
+  -e EMBY_URL=http://emby:8096 \
+  -e EMBY_API_KEY=xxx \
+  -e DELETE_EMPTY_SERIES=true \
   your-username/emby-autoclean
 ```
 
